@@ -1,0 +1,50 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Your private repo with the prepared game files and, afterwards, the IPA.
+  ASSETS_REPO: ${{ github.repository_owner }}/horizon-assets
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          which cargo
+          cargo --version
+          xcodebuild -version
+
+      - name: Download prepared assets (private repo)
+        env:
+          GH_TOKEN: ${{ secrets.ASSETS_TOKEN }}
+        run: |
+          mkdir -p .local/horizon-client
+          gh release download assets --repo "$ASSETS_REPO" \
+            --pattern horizon-assets.zip --dir "$RUNNER_TEMP"
+          unzip -q "$RUNNER_TEMP/horizon-assets.zip" -d .local/horizon-client
+          test -f .local/horizon-client/26.3/horizon-resources.json
+
+      - name: Build IPA
+        run: packaging/ios/package.sh device .local/horizon-client/26.3 .local/ios
+
+      - name: Upload IPA to the private repo
+        env:
+          GH_TOKEN: ${{ secrets.ASSETS_TOKEN }}
+        run: |
+          gh release delete ipa --repo "$ASSETS_REPO" --cleanup-tag --yes || true
+          gh release create ipa .local/ios/device/Horizon.ipa \
+            --repo "$ASSETS_REPO" \
+            --title "Horizon IPA" \
+            --notes "Built by workflow run ${{ github.run_id }}"
