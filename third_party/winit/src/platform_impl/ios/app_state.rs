@@ -717,6 +717,12 @@ pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
     if !this.has_launched() || this.has_terminated() {
         return;
     }
+
+    // Refresh physical mice after application initialization.
+    if super::mouse_input::take_mouse_devices_changed() {
+        super::mouse_input::unregister_disconnected_mice();
+        super::mouse_input::register_mouse_motion();
+    }
     match this.state_mut() {
         AppStateImpl::ProcessingEvents { .. } => {},
         _ => bug!("`ProcessingRedraws` happened unexpectedly"),

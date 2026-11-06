@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use block2::RcBlock;
 use objc2_game_controller::{GCMouse, GCControllerButtonInput};
+use std::collections::HashSet;
 
 #[derive(Default)]
 pub(crate) struct MouseMotionQueue {
@@ -89,6 +91,28 @@ pub(crate) fn take_wheel() -> Vec<MouseWheelEvent> {
         .drain(..).collect()
 }
 
+static MOUSE_DEVICES_CHANGED: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn mark_mouse_devices_changed() {
+    MOUSE_DEVICES_CHANGED.store(true, Ordering::Release);
+
+    unsafe {
+        let run_loop = core_foundation::runloop::CFRunLoopGetMain();
+        core_foundation::runloop::CFRunLoopWakeUp(run_loop);
+    }
+}
+
+pub(crate) fn take_mouse_devices_changed() -> bool {
+    MOUSE_DEVICES_CHANGED.swap(false, Ordering::AcqRel)
+}
+
+// Track registered physical mouse objects to avoid duplicate callbacks.
+static REGISTERED_MICE: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+
+fn registered_mice() -> &'static Mutex<HashSet<usize>> {
+    REGISTERED_MICE.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 static MOUSE_MOTION: OnceLock<MouseMotionQueue> = OnceLock::new();
 
 fn queue() -> &'static MouseMotionQueue {
@@ -158,6 +182,22 @@ fn register_wheel(input: &objc2_game_controller::GCMouseInput) {
     std::mem::forget(callback);
 }
 
+/// Remove identities of mice no longer reported by iOS.
+pub(crate) fn unregister_disconnected_mice() {
+    let mice = unsafe { GCMouse::mice() };
+
+    let connected: HashSet<usize> = mice
+        .iter()
+        .map(|mouse| (mouse as *const GCMouse) as usize)
+        .collect();
+
+    let mut registered = registered_mice()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+
+    registered.retain(|id| connected.contains(id));
+}
+
 /// Register motion callbacks for mice already connected to iOS.
 pub(crate) fn register_mouse_motion() {
     let mice = unsafe { GCMouse::mice() };
@@ -166,6 +206,19 @@ pub(crate) fn register_mouse_motion() {
         let Some(input) = (unsafe { mouse.mouseInput() }) else {
             continue;
         };
+
+        // Use the Objective-C object address as the device identity.
+        let device_id = (mouse as *const GCMouse) as usize;
+
+        {
+            let mut registered = registered_mice()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+
+            if !registered.insert(device_id) {
+                continue;
+            }
+        }
 
         register_wheel(&input);
 

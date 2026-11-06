@@ -14,6 +14,7 @@ use core_foundation::runloop::{
 use objc2::rc::Retained;
 use objc2::{msg_send_id, ClassType};
 use objc2_foundation::{MainThreadMarker, NSNotificationCenter, NSObject};
+use objc2_game_controller::{GCMouseDidConnectNotification, GCMouseDidDisconnectNotification};
 use objc2_ui_kit::{
     UIApplication, UIApplicationDidBecomeActiveNotification,
     UIApplicationDidEnterBackgroundNotification, UIApplicationDidFinishLaunchingNotification,
@@ -152,6 +153,8 @@ pub struct EventLoop<T: 'static> {
     _did_enter_background_observer: Retained<NSObject>,
     _will_terminate_observer: Retained<NSObject>,
     _did_receive_memory_warning_observer: Retained<NSObject>,
+    _mouse_connected_observer: Retained<NSObject>,
+    _mouse_disconnected_observer: Retained<NSObject>,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -276,6 +279,22 @@ impl<T: 'static> EventLoop<T> {
             },
         );
 
+        let _mouse_connected_observer = create_observer(
+            &center,
+            unsafe { GCMouseDidConnectNotification },
+            move |_| {
+                super::mouse_input::mark_mouse_devices_changed();
+            },
+        );
+
+        let _mouse_disconnected_observer = create_observer(
+            &center,
+            unsafe { GCMouseDidDisconnectNotification },
+            move |_| {
+                super::mouse_input::mark_mouse_devices_changed();
+            },
+        );
+
         Ok(EventLoop {
             mtm,
             sender,
@@ -289,6 +308,8 @@ impl<T: 'static> EventLoop<T> {
             _did_enter_background_observer,
             _will_terminate_observer,
             _did_receive_memory_warning_observer,
+            _mouse_connected_observer,
+            _mouse_disconnected_observer,
         })
     }
 
