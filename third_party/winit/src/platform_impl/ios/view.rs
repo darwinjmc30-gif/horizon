@@ -2,6 +2,7 @@
 use std::cell::{Cell, RefCell};
 
 use objc2::rc::{Retained, WeakId};
+use objc2_game_controller::GCMouse;
 use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{
     class, declare_class, msg_send, msg_send_id, mutability, sel, ClassType, DeclaredClass,
@@ -464,6 +465,10 @@ impl WinitView {
         window_attributes: &WindowAttributes,
         frame: CGRect,
     ) -> Retained<Self> {
+        // Detect physical mice already connected to iOS.
+        let connected_mice = unsafe { GCMouse::mice() };
+        tracing::info!("iOS GameController mouse count: {}", connected_mice.len());
+
         let this = mtm.alloc().set_ivars(WinitViewState {
             pinch_gesture_recognizer: RefCell::new(None),
             doubletap_gesture_recognizer: RefCell::new(None),
