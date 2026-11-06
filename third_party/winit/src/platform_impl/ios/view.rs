@@ -11,7 +11,7 @@ use objc2_foundation::{
     NSSet, NSString,
 };
 use objc2_ui_kit::{
-    UICoordinateSpace, UIEvent, UIForceTouchCapability, UIGestureRecognizer,
+    UICoordinateSpace, UIEvent, UIForceTouchCapability, UIGestureRecognizer, UIKey, UIPress, UIPressesEvent,
     UIGestureRecognizerDelegate, UIGestureRecognizerState, UIKeyInput,
     UIKeyboardFrameEndUserInfoKey, UIKeyboardWillChangeFrameNotification,
     UIKeyboardWillHideNotification, UIPanGestureRecognizer, UIPinchGestureRecognizer,
@@ -352,7 +352,23 @@ declare_class!(
             let mtm = MainThreadMarker::new().unwrap();
             app_state::handle_nonuser_event(mtm, gesture_event);
         }
+        #[method(pressesBegan:withEvent:)]
+fn presses_began(
+    &self,
+    presses: &NSSet<UIPress>,
+    _event: Option<&UIPressesEvent>,
+) {
+    self.handle_physical_keys(presses, ElementState::Pressed);
+}
 
+#[method(pressesEnded:withEvent:)]
+fn presses_ended(
+    &self,
+    presses: &NSSet<UIPress>,
+    _event: Option<&UIPressesEvent>,
+) {
+    self.handle_physical_keys(presses, ElementState::Released);
+}
         #[method(canBecomeFirstResponder)]
         fn can_become_first_responder(&self) -> bool {
             true
@@ -691,7 +707,53 @@ impl WinitView {
         let mtm = MainThreadMarker::new().unwrap();
         app_state::handle_nonuser_events(mtm, touch_events);
     }
+    fn handle_physical_keys(
+    &self,
+    presses: &NSSet<UIPress>,
+    state: ElementState,
+) {
+    let window = self.window().unwrap();
+    let window_id = RootWindowId(window.id());
+    let mut events = Vec::new();
 
+    for press in presses {
+        let Some(key) = press.key() else {
+            continue;
+        };
+
+        let characters = key.charactersIgnoringModifiers().to_string();
+
+        let (physical_key, logical_key) =
+            match characters.to_lowercase().as_str() {
+                "w" => (KeyCode::KeyW, Key::Character("w".into())),
+                "a" => (KeyCode::KeyA, Key::Character("a".into())),
+                "s" => (KeyCode::KeyS, Key::Character("s".into())),
+                "d" => (KeyCode::KeyD, Key::Character("d".into())),
+                " " => (KeyCode::Space, Key::Named(NamedKey::Space)),
+                _ => continue,
+            };
+
+        events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+            window_id,
+            event: WindowEvent::KeyboardInput {
+                device_id: DEVICE_ID,
+                event: KeyEvent {
+                    state,
+                    logical_key,
+                    physical_key: PhysicalKey::Code(physical_key),
+                    platform_specific: KeyEventExtra {},
+                    repeat: false,
+                    location: KeyLocation::Standard,
+                    text: None,
+                },
+                is_synthetic: false,
+            },
+        }));
+    }
+
+    let mtm = MainThreadMarker::new().unwrap();
+    app_state::handle_nonuser_events(mtm, events);
+}
     fn handle_insert_text(&self, text: &NSString) {
         let window = self.window().unwrap();
         let window_id = RootWindowId(window.id());

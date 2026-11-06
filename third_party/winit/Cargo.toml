@@ -409,6 +409,9 @@ features = [
 [target.'cfg(target_os = "ios")'.dependencies.objc2-ui-kit]
 version = "0.2.2"
 features = [
+    "UIPress",
+    "UIKey",
+    "UIPressesEvent",
     "UIApplication",
     "UIDevice",
     "UIEvent",
