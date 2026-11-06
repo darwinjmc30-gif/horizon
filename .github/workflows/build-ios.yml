@@ -39,7 +39,15 @@ jobs:
       - name: Build IPA
         run: packaging/ios/package.sh device .local/horizon-client/26.3 .local/ios
 
-      - name: Upload IPA to the private repo
+      - name: Upload experimental IPA to the private repo
+        env:
+          GH_TOKEN: ${{ secrets.ASSETS_TOKEN }}
+        run: |
+          gh release delete ipa-keyboard-test --repo "$ASSETS_REPO" --cleanup-tag --yes || true
+          gh release create ipa-keyboard-test .local/ios/device/Horizon.ipa \
+            --repo "$ASSETS_REPO" \
+            --title "Horizon Keyboard Test" \
+            --notes "Experimental keyboard build from ${{ github.ref_name }} - run ${{ github.run_id }}"
         env:
           GH_TOKEN: ${{ secrets.ASSETS_TOKEN }}
         run: |
