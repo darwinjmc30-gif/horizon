@@ -486,6 +486,9 @@ impl WinitView {
 
         this.setMultipleTouchEnabled(true);
 
+        // Register physical mouse movement callbacks.
+        super::mouse_input::register_mouse_motion();
+
         let center = unsafe { NSNotificationCenter::defaultCenter() };
         let observers = unsafe {
             [UIKeyboardWillChangeFrameNotification, UIKeyboardWillHideNotification]

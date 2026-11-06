@@ -725,6 +725,19 @@ pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
 
     handle_user_events(mtm);
 
+    // Deliver physical mouse movement on the iOS main thread.
+    if let Some((dx, dy)) = super::mouse_input::take_motion() {
+        handle_nonuser_event(
+            mtm,
+            EventWrapper::StaticEvent(Event::DeviceEvent {
+                device_id: super::DEVICE_ID,
+                event: crate::event::DeviceEvent::MouseMotion {
+                    delta: (dx, dy),
+                },
+            }),
+        );
+    }
+
     let mut this = AppState::get_mut(mtm);
     let redraw_events: Vec<EventWrapper> = this
         .main_events_cleared_transition()
