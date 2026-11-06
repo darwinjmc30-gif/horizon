@@ -11909,7 +11909,7 @@ impl ApplicationHandler for Game<'_> {
     }
     fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
         if self.pending_save.is_none()
-            && self.captured
+            && (self.captured || cfg!(target_os = "ios"))
             && self.focused
             && self.screen == Screen::Playing
             && let DeviceEvent::MouseMotion { delta: (x, y) } = event

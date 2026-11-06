@@ -66,5 +66,8 @@ pub(crate) fn register_mouse_motion() {
         unsafe {
             input.setMouseMovedHandler((&*callback as *const _) as *mut _);
         }
+
+        // Keep the block alive for the lifetime of the process.
+        std::mem::forget(callback);
     }
 }
