@@ -717,7 +717,7 @@ impl WinitView {
     let mut events = Vec::new();
 
     for press in presses {
-        let Some(key) = press.key() else {
+        let Some(key) = unsafe { press.key(MainThreadMarker::new().unwrap()) } else {
             continue;
         };
 
