@@ -58,7 +58,7 @@ pub(crate) fn register_mouse_motion() {
         };
 
         let callback = RcBlock::new(
-            move |_input, dx: f32, dy: f32| {
+            move |_input: std::ptr::NonNull<objc2_game_controller::GCMouseInput>, dx: f32, dy: f32| {
                 push_motion(dx as f64, dy as f64);
             },
         );
