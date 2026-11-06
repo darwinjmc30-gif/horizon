@@ -64,7 +64,7 @@ pub(crate) fn register_mouse_motion() {
         );
 
         unsafe {
-            input.setMouseMovedHandler(&mut *callback);
+            input.setMouseMovedHandler(callback.as_ptr() as *mut _);
         }
     }
 }
