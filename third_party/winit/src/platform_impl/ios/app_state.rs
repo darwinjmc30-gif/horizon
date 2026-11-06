@@ -787,6 +787,42 @@ pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
         handle_nonuser_events(mtm, events);
     }
 
+    // Deliver physical Bluetooth mouse wheel events.
+    let wheel_events = super::mouse_input::take_wheel();
+    if !wheel_events.is_empty() {
+        let application = UIApplication::sharedApplication(mtm);
+        let mut events = Vec::new();
+
+        #[allow(deprecated)]
+        for window in application.windows().iter() {
+            if !window.is_kind_of::<WinitUIWindow>() {
+                continue;
+            }
+
+            let window = unsafe {
+                let ptr: *const UIWindow = window;
+                let ptr: *const WinitUIWindow = ptr.cast();
+                &*ptr
+            };
+
+            for wheel in &wheel_events {
+                events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+                    window_id: RootWindowId(window.id()),
+                    event: WindowEvent::MouseWheel {
+                        device_id: super::DEVICE_ID,
+                        delta: crate::event::MouseScrollDelta::LineDelta(
+                            wheel.x,
+                            wheel.y,
+                        ),
+                        phase: crate::event::TouchPhase::Moved,
+                    },
+                }));
+            }
+        }
+
+        handle_nonuser_events(mtm, events);
+    }
+
     let mut this = AppState::get_mut(mtm);
     let redraw_events: Vec<EventWrapper> = this
         .main_events_cleared_transition()

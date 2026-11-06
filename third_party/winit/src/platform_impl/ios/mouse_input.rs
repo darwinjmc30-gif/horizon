@@ -60,6 +60,35 @@ pub(crate) fn take_buttons() -> Vec<MouseButtonEvent> {
         .drain(..).collect()
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct MouseWheelEvent {
+    pub x: f32,
+    pub y: f32,
+}
+
+static MOUSE_WHEEL: OnceLock<Mutex<VecDeque<MouseWheelEvent>>> = OnceLock::new();
+
+pub(crate) fn push_wheel(x: f32, y: f32) {
+    if !x.is_finite() || !y.is_finite() {
+        return;
+    }
+
+    let queue = MOUSE_WHEEL.get_or_init(|| Mutex::new(VecDeque::new()));
+    queue.lock().unwrap_or_else(|e| e.into_inner())
+        .push_back(MouseWheelEvent { x, y });
+
+    unsafe {
+        let run_loop = core_foundation::runloop::CFRunLoopGetMain();
+        core_foundation::runloop::CFRunLoopWakeUp(run_loop);
+    }
+}
+
+pub(crate) fn take_wheel() -> Vec<MouseWheelEvent> {
+    let queue = MOUSE_WHEEL.get_or_init(|| Mutex::new(VecDeque::new()));
+    queue.lock().unwrap_or_else(|e| e.into_inner())
+        .drain(..).collect()
+}
+
 static MOUSE_MOTION: OnceLock<MouseMotionQueue> = OnceLock::new();
 
 fn queue() -> &'static MouseMotionQueue {
@@ -107,6 +136,28 @@ fn register_button(
     std::mem::forget(callback);
 }
 
+fn register_wheel(input: &objc2_game_controller::GCMouseInput) {
+    let scroll = unsafe { input.scroll() };
+
+    let callback = RcBlock::new(
+        move |
+            _input: std::ptr::NonNull<objc2_game_controller::GCControllerDirectionPad>,
+            x: f32,
+            y: f32,
+        | {
+            push_wheel(x, y);
+        },
+    );
+
+    unsafe {
+        scroll.setValueChangedHandler(
+            (&*callback as *const _) as *mut _
+        );
+    }
+
+    std::mem::forget(callback);
+}
+
 /// Register motion callbacks for mice already connected to iOS.
 pub(crate) fn register_mouse_motion() {
     let mice = unsafe { GCMouse::mice() };
@@ -115,6 +166,8 @@ pub(crate) fn register_mouse_motion() {
         let Some(input) = (unsafe { mouse.mouseInput() }) else {
             continue;
         };
+
+        register_wheel(&input);
 
         let left_button = unsafe { input.leftButton() };
         register_button(
