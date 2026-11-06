@@ -717,11 +717,11 @@ impl WinitView {
     let mut events = Vec::new();
 
     for press in presses {
-        let Some(key) = unsafe { press.key(MainThreadMarker::new().unwrap()) } else {
+        let Some(key) = (unsafe { press.key(MainThreadMarker::new().unwrap()) }) else {
             continue;
         };
 
-        let characters = key.charactersIgnoringModifiers().to_string();
+        let characters = unsafe { key.charactersIgnoringModifiers() }.to_string();
 
         let (physical_key, logical_key) =
             match characters.to_lowercase().as_str() {
