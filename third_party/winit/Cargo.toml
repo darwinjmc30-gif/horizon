@@ -396,6 +396,8 @@ features = [
     "GCPhysicalInputProfile",
     "GCControllerButtonInput",
     "GCControllerDirectionPad",
+    "GCControllerElement",
+    "GCDeviceCursor",
 ]
 
 [target.'cfg(target_os = "ios")'.dependencies.objc2-foundation]

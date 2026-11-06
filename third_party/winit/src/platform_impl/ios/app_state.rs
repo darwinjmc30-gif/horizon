@@ -738,6 +738,55 @@ pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
         );
     }
 
+    // Deliver physical mouse buttons on the iOS main thread.
+    let button_events = super::mouse_input::take_buttons();
+    if !button_events.is_empty() {
+        let application = unsafe { UIApplication::sharedApplication(mtm) };
+        let mut events = Vec::new();
+
+        #[allow(deprecated)]
+        for window in application.windows().iter() {
+            if !window.is_kind_of::<WinitUIWindow>() {
+                continue;
+            }
+
+            let window = unsafe {
+                let ptr: *const UIWindow = window;
+                let ptr: *const WinitUIWindow = ptr.cast();
+                &*ptr
+            };
+
+            for button_event in &button_events {
+                let button = match button_event.button {
+                    super::mouse_input::PhysicalMouseButton::Left => {
+                        crate::event::MouseButton::Left
+                    }
+                    super::mouse_input::PhysicalMouseButton::Right => {
+                        crate::event::MouseButton::Right
+                    }
+                    super::mouse_input::PhysicalMouseButton::Middle => {
+                        crate::event::MouseButton::Middle
+                    }
+                };
+
+                events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+                    window_id: RootWindowId(window.id()),
+                    event: WindowEvent::MouseInput {
+                        device_id: super::DEVICE_ID,
+                        state: if button_event.pressed {
+                            crate::event::ElementState::Pressed
+                        } else {
+                            crate::event::ElementState::Released
+                        },
+                        button,
+                    },
+                }));
+            }
+        }
+
+        handle_nonuser_events(mtm, events);
+    }
+
     let mut this = AppState::get_mut(mtm);
     let redraw_events: Vec<EventWrapper> = this
         .main_events_cleared_transition()
