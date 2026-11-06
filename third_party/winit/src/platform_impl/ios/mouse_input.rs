@@ -116,8 +116,9 @@ pub(crate) fn register_mouse_motion() {
             continue;
         };
 
+        let left_button = unsafe { input.leftButton() };
         register_button(
-            &unsafe { input.leftButton() },
+            &*left_button,
             PhysicalMouseButton::Left,
         );
 
