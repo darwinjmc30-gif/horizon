@@ -24,7 +24,7 @@ use objc2_foundation::{ns_string, NSBundle};
 use objc2_ui_kit::{UIApplication, UICoordinateSpace, UIView, UIWindow, UIWindowScene};
 
 use super::window::WinitUIWindow;
-use crate::dpi::PhysicalSize;
+use crate::dpi::{PhysicalPosition, PhysicalSize};
 use crate::event::{Event, InnerSizeWriter, StartCause, WindowEvent};
 use crate::event_loop::{ActiveEventLoop as RootActiveEventLoop, ControlFlow};
 use crate::window::WindowId as RootWindowId;
@@ -712,6 +712,22 @@ pub(crate) fn send_occluded_event_for_all_windows(application: &UIApplication, o
     handle_nonuser_events(mtm, events);
 }
 
+
+// Virtual cursor position for physical mice on iOS, in physical pixels.
+static PHYSICAL_MOUSE_CURSOR: OnceLock<Mutex<(f64, f64)>> = OnceLock::new();
+
+fn physical_mouse_cursor(dx: f64, dy: f64, width: f64, height: f64) -> PhysicalPosition<f64> {
+    let cursor = PHYSICAL_MOUSE_CURSOR.get_or_init(|| {
+        Mutex::new((width / 2.0, height / 2.0))
+    });
+    let mut cursor = cursor.lock().unwrap_or_else(|e| e.into_inner());
+
+    cursor.0 = (cursor.0 + dx).clamp(0.0, (width - 1.0).max(0.0));
+    cursor.1 = (cursor.1 + dy).clamp(0.0, (height - 1.0).max(0.0));
+
+    PhysicalPosition::new(cursor.0, cursor.1)
+}
+
 pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
     let mut this = AppState::get_mut(mtm);
     if !this.has_launched() || this.has_terminated() {
@@ -742,6 +758,39 @@ pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
                 },
             }),
         );
+
+        // Also provide an absolute cursor position for menus and inventories.
+        let application = UIApplication::sharedApplication(mtm);
+        let mut events = Vec::new();
+
+        #[allow(deprecated)]
+        for window in application.windows().iter() {
+            if !window.is_kind_of::<WinitUIWindow>() {
+                continue;
+            }
+
+            let window = unsafe {
+                let ptr: *const UIWindow = window;
+                let ptr: *const WinitUIWindow = ptr.cast();
+                &*ptr
+            };
+
+            let bounds = window.bounds();
+            let scale = window.screen().scale() as f64;
+            let width = bounds.size.width as f64 * scale;
+            let height = bounds.size.height as f64 * scale;
+            let position = physical_mouse_cursor(dx, dy, width, height);
+
+            events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+                window_id: RootWindowId(window.id()),
+                event: WindowEvent::CursorMoved {
+                    device_id: super::DEVICE_ID,
+                    position,
+                },
+            }));
+        }
+
+        handle_nonuser_events(mtm, events);
     }
 
     // Deliver physical mouse buttons on the iOS main thread.
